@@ -2,7 +2,7 @@ name: Build Win32 GUI EXE
 
 on:
   push:
-    branches: [ "main", "fyne-version" ] # Робот будет собирать из любой ветки
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -18,26 +18,32 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Compile Win32 GUI
+    - name: Compile Win32 GUI and Compress
       shell: bash
       run: |
         go mod init sentinel-tool
         go mod tidy
         
-        # 1. Скачиваем утилиту для упаковки ресурсов (манифестов)
+        # Скачиваем упаковщик ресурсов
         go install github.com/akavel/rsrc@latest
         
-        # 2. Создаем файл манифеста (чтобы кнопки выглядели современно, а не как в Win 95)
+        # Создаем обязательный манифест (без него lxn/walk упадет при запуске)
         echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="App" type="win32"/><dependency><dependentAssembly><assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/></dependentAssembly></dependency></assembly>' > app.manifest
         
-        # 3. Упаковываем манифест в формат .syso (Go автоматически подхватит его при сборке)
+        # Упаковываем манифест (пока без иконки, чтобы исключить ошибки)
         rsrc -manifest app.manifest -o rsrc.syso
         
-        # 4. Собираем легкий EXE
-        go build -ldflags="-s -w -H=windowsgui" -o SentinelConverter-Win32.exe main.go
+        # СОБИРАЕМ БЕЗ -H=windowsgui (чтобы видеть ошибки в консоли!)
+        go build -ldflags="-s -w" -o SentinelConverter-Win32.exe main.go
+
+    # Скачиваем и запускаем архиватор UPX для экстремального сжатия
+    - name: Compress with UPX
+      run: |
+        choco install upx
+        upx --best --lzma SentinelConverter-Win32.exe
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-Win32-Executable
+        name: Sentinel-Win32-Debug
         path: SentinelConverter-Win32.exe
