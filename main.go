@@ -9,11 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
+	"github.com/lxn/walk"
+	. "github.com/lxn/walk/declarative"
 )
 
 type TokenResponse struct {
@@ -21,126 +18,128 @@ type TokenResponse struct {
 }
 
 func main() {
-	a := app.New()
-	w := a.NewWindow("Sentinel Hub Migration Tool")
-	w.Resize(fyne.NewSize(500, 600))
+	var mw *walk.MainWindow
+	var oldID, oldSecret, instID, newID, newSecret *walk.LineEdit
+	var logBox *walk.TextEdit
+	var btnRun *walk.PushButton
 
-	oldClientID := widget.NewEntry()
-	oldClientID.SetPlaceHolder("Old Client ID")
-	oldClientSecret := widget.NewEntry()
-	oldClientSecret.SetPlaceHolder("Old Client Secret")
-	instanceID := widget.NewEntry()
-	instanceID.SetText("464a9446-179b-4aa1-bc94-a36c79f47f6a")
-
-	oldGroup := container.NewVBox(
-		widget.NewLabelWithStyle("OLD ACCOUNT", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel("Client ID:"), oldClientID,
-		widget.NewLabel("Client Secret:"), oldClientSecret,
-		widget.NewLabel("Configuration ID:"), instanceID,
-	)
-
-	newClientID := widget.NewEntry()
-	newClientID.SetPlaceHolder("New Client ID")
-	newClientSecret := widget.NewEntry()
-	newClientSecret.SetPlaceHolder("New Client Secret")
-
-	newGroup := container.NewVBox(
-		widget.NewLabelWithStyle("NEW ACCOUNT", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel("Client ID:"), newClientID,
-		widget.NewLabel("Client Secret:"), newClientSecret,
-	)
-
-	logBox := widget.NewMultiLineEntry()
-	logBox.Disable()
-	
-	logMsg := func(text string) {
-		logBox.SetText(logBox.Text + text + "\n")
-		logBox.CursorRow = len(strings.Split(logBox.Text, "\n"))
+	// Функция для безопасного вывода логов из фонового потока в интерфейс
+	logMsg := func(msg string) {
+		mw.Synchronize(func() {
+			logBox.AppendText(msg + "\r\n")
+		})
 	}
 
-	var btnRun *widget.Button
-	btnRun = widget.NewButton("Run Migration", func() {
-		if oldClientID.Text == "" || oldClientSecret.Text == "" || newClientID.Text == "" || newClientSecret.Text == "" || instanceID.Text == "" {
-			dialog.ShowError(fmt.Errorf("fill all fields"), w)
-			return
-		}
+	MainWindow{
+		AssignTo: &mw,
+		Title:    "Перенос подложек Sentinel Hub",
+		MinSize:  Size{Width: 500, Height: 550},
+		Layout:   VBox{},
+		Children: []Widget{
+			GroupBox{
+				Title:  "СТАРЫЙ АККАУНТ (Откуда забираем)",
+				Layout: Grid{Columns: 2},
+				Children: []Widget{
+					Label{Text: "Старый Client ID:"},
+					LineEdit{AssignTo: &oldID},
+					Label{Text: "Старый Client Secret:"},
+					LineEdit{AssignTo: &oldSecret, PasswordMode: true}, // PasswordMode скроет ввод звездочками
+					Label{Text: "ID Конфигурации:"},
+					LineEdit{AssignTo: &instID, Text: "464a9446-179b-4aa1-bc94-a36c79f47f6a"},
+				},
+			},
+			GroupBox{
+				Title:  "НОВЫЙ АККАУНТ (Куда переносим)",
+				Layout: Grid{Columns: 2},
+				Children: []Widget{
+					Label{Text: "Новый Client ID:"},
+					LineEdit{AssignTo: &newID},
+					Label{Text: "Новый Client Secret:"},
+					LineEdit{AssignTo: &newSecret, PasswordMode: true},
+				},
+			},
+			Label{Text: "Журнал событий:"},
+			TextEdit{
+				AssignTo: &logBox,
+				ReadOnly: true,
+				VScroll:  true,
+			},
+			PushButton{
+				AssignTo: &btnRun,
+				Text:     "Запустить перенос",
+				OnClicked: func() {
+					// Проверка на пустые поля
+					if oldID.Text() == "" || oldSecret.Text() == "" || newID.Text() == "" || newSecret.Text() == "" || instID.Text() == "" {
+						walk.MsgBox(mw, "Ошибка", "Заполните все поля!", walk.MsgBoxIconWarning)
+						return
+					}
 
-		btnRun.Disable()
-		logBox.SetText("")
+					btnRun.SetEnabled(false)
+					logBox.SetText("")
 
-		go func() {
-			defer btnRun.Enable()
+					// Запускаем процесс в фоне (Горутина)
+					go func() {
+						// Обязательно возвращаем кнопку в рабочее состояние после завершения
+						defer mw.Synchronize(func() { btnRun.SetEnabled(true) })
 
-			logMsg("Connecting to OLD account...")
-			tokenOld, err := getToken(oldClientID.Text, oldClientSecret.Text)
-			if err != nil {
-				logMsg(fmt.Sprintf("Error: %v", err))
-				return
-			}
-			logMsg("Success")
+						logMsg("🔑 Подключение к СТАРОМУ аккаунту...")
+						tokenOld, err := getToken(oldID.Text(), oldSecret.Text())
+						if err != nil {
+							logMsg(fmt.Sprintf("❌ Ошибка: %v", err))
+							return
+						}
+						logMsg("✅ Успешно!")
 
-			logMsg("Connecting to NEW account...")
-			tokenNew, err := getToken(newClientID.Text, newClientSecret.Text)
-			if err != nil {
-				logMsg(fmt.Sprintf("Error: %v", err))
-				return
-			}
-			logMsg("Success")
+						logMsg("🔑 Подключение к НОВОМУ аккаунту...")
+						tokenNew, err := getToken(newID.Text(), newSecret.Text())
+						if err != nil {
+							logMsg(fmt.Sprintf("❌ Ошибка: %v", err))
+							return
+						}
+						logMsg("✅ Успешно!")
 
-			logMsg(fmt.Sprintf("Reading layers from %s...", instanceID.Text))
-			oldLayers, err := getLayers(tokenOld, instanceID.Text)
-			if err != nil {
-				logMsg(fmt.Sprintf("Error: %v", err))
-				return
-			}
+						logMsg(fmt.Sprintf("📥 Чтение слоев из %s...", instID.Text()))
+						oldLayers, err := getLayers(tokenOld, instID.Text())
+						if err != nil {
+							logMsg(fmt.Sprintf("❌ Ошибка: %v", err))
+							return
+						}
 
-			logMsg("Creating new instance...")
-			newInstID, err := createInstance(tokenNew, "GP WMS Services (Migrated)")
-			if err != nil {
-				logMsg(fmt.Sprintf("Error: %v", err))
-				return
-			}
+						logMsg("📦 Создание новой конфигурации...")
+						newInstID, err := createInstance(tokenNew, "GP WMS Services (Migrated)")
+						if err != nil {
+							logMsg(fmt.Sprintf("❌ Ошибка: %v", err))
+							return
+						}
 
-			logMsg(fmt.Sprintf("Migrating layers (%d)...", len(oldLayers)))
-			for _, layer := range oldLayers {
-				layerID := "Unknown"
-				if id, ok := layer["id"].(string); ok {
-					layerID = id
-				}
+						logMsg(fmt.Sprintf("🔄 Перенос слоев (%d шт.)...", len(oldLayers)))
+						for _, layer := range oldLayers {
+							layerID := "Unknown"
+							if id, ok := layer["id"].(string); ok {
+								layerID = id
+							}
 
-				delete(layer, "instanceId")
-				delete(layer, "lastUpdated")
-				delete(layer, "created")
+							delete(layer, "instanceId")
+							delete(layer, "lastUpdated")
+							delete(layer, "created")
 
-				err := postLayer(tokenNew, newInstID, layer)
-				if err != nil {
-					logMsg(fmt.Sprintf("  Layer '%s' error: %v", layerID, err))
-				} else {
-					logMsg(fmt.Sprintf("  Layer '%s' added", layerID))
-				}
-			}
+							err := postLayer(tokenNew, newInstID, layer)
+							if err != nil {
+								logMsg(fmt.Sprintf("   ❌ Ошибка слоя '%s': %v", layerID, err))
+							} else {
+								logMsg(fmt.Sprintf("   ✅ Слой '%s' добавлен.", layerID))
+							}
+						}
 
-			logMsg(fmt.Sprintf("\nDONE!\nNew Instance ID: %s", newInstID))
-		}()
-	})
-	btnRun.Importance = widget.HighImportance
-
-	content := container.NewVBox(
-		oldGroup,
-		widget.NewSeparator(),
-		newGroup,
-		widget.NewSeparator(),
-		widget.NewLabel("Log:"),
-	)
-
-	split := container.NewVSplit(content, logBox)
-	split.SetOffset(0.6)
-
-	mainLayout := container.NewBorder(nil, btnRun, nil, nil, split)
-
-	w.SetContent(mainLayout)
-	w.ShowAndRun()
+						logMsg(fmt.Sprintf("\n🎉 ГОТОВО!\nНовый рабочий ID: %s", newInstID))
+					}()
+				},
+			},
+		},
+	}.Run()
 }
+
+// ---- АПИ ФУНКЦИИ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ---- //
 
 func getToken(clientID, clientSecret string) (string, error) {
 	data := url.Values{}
@@ -162,7 +161,7 @@ func getToken(clientID, clientSecret string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("401 unauthorized")
+		return "", fmt.Errorf("неверный ID или Secret")
 	}
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("http error: %d", resp.StatusCode)
@@ -190,7 +189,7 @@ func getLayers(token, instanceID string) ([]map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to get layers, status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("ошибка получения слоев: %d", resp.StatusCode)
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -219,7 +218,7 @@ func createInstance(token, name string) (string, error) {
 
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("failed to create instance: %s", string(body))
+		return "", fmt.Errorf("ошибка: %s", string(body))
 	}
 
 	body, _ := io.ReadAll(resp.Body)
@@ -229,7 +228,7 @@ func createInstance(token, name string) (string, error) {
 	if id, ok := res["id"].(string); ok {
 		return id, nil
 	}
-	return "", fmt.Errorf("id not found in response")
+	return "", fmt.Errorf("id не найден в ответе")
 }
 
 func postLayer(token, instanceID string, layer map[string]interface{}) error {
