@@ -1,4 +1,4 @@
-name: Build Fyne GUI EXE (Compressed + Icon)
+name: Build Fyne GUI EXE (Official PNG Packager)
 
 on:
   push:
@@ -18,36 +18,26 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Setup MSYS2 (Обязательно для графики Fyne)
+    - name: Setup MSYS2 (Required for Fyne CGO)
       uses: msys2/setup-msys2@v2
       with:
         install: gcc
         release: false
 
-    - name: Compile Fyne GUI with Icon
+    - name: Compile and Package with Fyne CLI
       shell: bash
       run: |
         go mod init sentinel-tool
         go mod tidy
         
-        # Скачиваем утилиту для иконки
-        go install github.com/akavel/rsrc@latest
+        # 1. Скачиваем официальный инструмент автоматизации Fyne
+        go install fyne.io/fyne/v2/cmd/fyne@latest
         
-        # Зашиваем ТОЛЬКО иконку (без манифеста, чтобы UPX ничего не сломал)
-        # Убедитесь, что файл app.ico лежит в репозитории!
-        rsrc -ico app.ico -o rsrc.syso
-        
-        # Собираем легкий EXE без консоли
-        go build -ldflags="-s -w -H=windowsgui" -o SentinelMigration.exe main.go
-
-    - name: Compress with UPX
-      run: |
-        choco install upx
-        # Экстремальное сжатие файла
-        upx --best --lzma SentinelMigration.exe
+        # 2. Собираем проект. Флаг -icon теперь принимает обычный PNG!
+        fyne package -os windows -icon app.png -name SentinelMigration.exe
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-Executable-Tiny
+        name: Sentinel-Executable-Release
         path: SentinelMigration.exe
