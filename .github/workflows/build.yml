@@ -1,0 +1,37 @@
+name: Build Windows GUI EXE
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Setup MSYS2 (Required for GUI)
+      uses: msys2/setup-msys2@v2
+      with:
+        install: gcc
+        release: false
+
+    - name: Compile GUI for Windows
+      run: |
+        go mod init sentinel-tool
+        go mod tidy
+        go build -ldflags="-s -w -H=windowsgui" -o SentinelConverter.exe main.go
+
+    - name: Upload EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: Sentinel-Windows-Executable
+        path: SentinelConverter.exe
