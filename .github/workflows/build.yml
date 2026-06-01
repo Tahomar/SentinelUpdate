@@ -18,32 +18,23 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Compile Win32 GUI and Compress
+    - name: Compile Win32 GUI
       shell: bash
       run: |
         go mod init sentinel-tool
         go mod tidy
         
-        # Скачиваем упаковщик ресурсов
         go install github.com/akavel/rsrc@latest
         
-        # Создаем обязательный манифест (без него lxn/walk упадет при запуске)
         echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="App" type="win32"/><dependency><dependentAssembly><assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/></dependentAssembly></dependency></assembly>' > app.manifest
         
-        # Упаковываем манифест (пока без иконки, чтобы исключить ошибки)
         rsrc -manifest app.manifest -o rsrc.syso
         
-        # СОБИРАЕМ БЕЗ -H=windowsgui (чтобы видеть ошибки в консоли!)
-        go build -ldflags="-s -w" -o SentinelConverter-Win32.exe main.go
-
-    # Скачиваем и запускаем архиватор UPX для экстремального сжатия
-    - name: Compress with UPX
-      run: |
-        choco install upx
-        upx --best --lzma SentinelConverter-Win32.exe
+        # Собираем со скрытой консолью и флагами оптимизации (это даст нам стабильные 9 МБ)
+        go build -ldflags="-s -w -H=windowsgui" -o SentinelConverter.exe main.go
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-Win32-Debug
-        path: SentinelConverter-Win32.exe
+        name: Sentinel-Win32-Final
+        path: SentinelConverter.exe
