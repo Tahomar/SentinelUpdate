@@ -1,4 +1,4 @@
-name: Build C# Windows EXE
+name: Build C# Windows EXE (Lightweight)
 
 on:
   push:
@@ -20,11 +20,11 @@ jobs:
 
     - name: Compile and Pack C# App
       run: |
-        # Собираем единый сжатый EXE файл, работающий на любом ПК
-        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained true -o output_folder
+        # Собираем ультра-легкий файл (без встроенной платформы)
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained false -o output_folder
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-CSharp-App
+        name: Sentinel-CSharp-Light
         path: output_folder\SentinelTool.exe
