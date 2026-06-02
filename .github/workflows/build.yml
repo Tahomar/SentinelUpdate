@@ -1,8 +1,8 @@
-name: Build Fyne GUI EXE (Official PNG Packager)
+name: Build C# Windows EXE (All Versions)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "csharp-version" ]
   workflow_dispatch:
 
 jobs:
@@ -13,31 +13,29 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v4
       with:
-        go-version: '1.22'
+        dotnet-version: '8.0.x'
 
-    - name: Setup MSYS2 (Required for Fyne CGO)
-      uses: msys2/setup-msys2@v2
-      with:
-        install: gcc
-        release: false
-
-    - name: Compile and Package with Fyne CLI
-      shell: bash
+    - name: Compile Lightweight App (75 KB)
       run: |
-        go mod init sentinel-tool
-        go mod tidy
-        
-        # 1. Скачиваем официальный инструмент автоматизации Fyne
-        go install fyne.io/fyne/v2/cmd/fyne@latest
-        
-        # 2. Собираем проект. Флаг -icon теперь принимает обычный PNG!
-        fyne package -os windows -icon app.png -name SentinelMigration.exe
+        # Собираем легкую версию без платформы внутри
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o output_light
 
-    - name: Upload EXE
+    - name: Compile Tank App (60 MB)
+      run: |
+        # Собираем тяжелую бессмертную версию с платформой и сжатием
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained true -o output_tank
+
+    - name: Upload Lightweight EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-Executable-Release
-        path: SentinelMigration.exe
+        name: Sentinel-CSharp-Lightweight
+        path: output_light\SentinelTool.exe
+
+    - name: Upload Tank EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: Sentinel-CSharp-Tank
+        path: output_tank\SentinelTool.exe
