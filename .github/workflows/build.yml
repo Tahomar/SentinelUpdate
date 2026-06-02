@@ -1,8 +1,8 @@
-name: Build C# Windows EXE (All Versions)
+name: Build Win32 GUI EXE
 
 on:
   push:
-    branches: [ "csharp-version" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -13,29 +13,28 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
+    - name: Set up Go
+      uses: actions/setup-go@v5
       with:
-        dotnet-version: '8.0.x'
+        go-version: '1.22'
 
-    - name: Compile Lightweight App (75 KB)
+    - name: Compile Win32 GUI
+      shell: bash
       run: |
-        # Собираем легкую версию без платформы внутри
-        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o output_light
+        go mod init sentinel-tool
+        go mod tidy
+        
+        go install github.com/akavel/rsrc@latest
+        
+        echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="App" type="win32"/><dependency><dependentAssembly><assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/></dependentAssembly></dependency></assembly>' > app.manifest
+        
+        rsrc -manifest app.manifest -o rsrc.syso
+        
+        # Собираем со скрытой консолью и флагами оптимизации (это даст нам стабильные 9 МБ)
+        go build -ldflags="-s -w -H=windowsgui" -o SentinelConverter.exe main.go
 
-    - name: Compile Tank App (60 MB)
-      run: |
-        # Собираем тяжелую бессмертную версию с платформой и сжатием
-        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained true -o output_tank
-
-    - name: Upload Lightweight EXE
+    - name: Upload EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-CSharp-Lightweight
-        path: output_light\SentinelTool.exe
-
-    - name: Upload Tank EXE
-      uses: actions/upload-artifact@v4
-      with:
-        name: Sentinel-CSharp-Tank
-        path: output_tank\SentinelTool.exe
+        name: Sentinel-Win32-Final
+        path: SentinelConverter.exe
