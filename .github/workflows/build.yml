@@ -1,4 +1,4 @@
-name: Build C# Windows EXE (Lightweight)
+name: Build C# Windows EXE (All Versions)
 
 on:
   push:
@@ -18,13 +18,24 @@ jobs:
       with:
         dotnet-version: '8.0.x'
 
-    - name: Compile and Pack C# App
+    - name: Compile Lightweight App (75 KB)
       run: |
-        # Собираем ультра-легкий файл. Флаг сжатия убран, так как он несовместим с lightweight.
-        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o output_folder
+        # Собираем легкую версию без платформы внутри
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o output_light
 
-    - name: Upload EXE
+    - name: Compile Tank App (60 MB)
+      run: |
+        # Собираем тяжелую бессмертную версию с платформой и сжатием
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained true -o output_tank
+
+    - name: Upload Lightweight EXE
       uses: actions/upload-artifact@v4
       with:
-        name: Sentinel-CSharp-Light
-        path: output_folder\SentinelTool.exe
+        name: Sentinel-CSharp-Lightweight
+        path: output_light\SentinelTool.exe
+
+    - name: Upload Tank EXE
+      uses: actions/upload-artifact@v4
+      with:
+        name: Sentinel-CSharp-Tank
+        path: output_tank\SentinelTool.exe
