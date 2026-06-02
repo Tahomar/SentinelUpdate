@@ -20,8 +20,8 @@ jobs:
 
     - name: Compile and Pack C# App
       run: |
-        # Собираем ультра-легкий файл (без встроенной платформы)
-        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true --self-contained false -o output_folder
+        # Собираем ультра-легкий файл. Флаг сжатия убран, так как он несовместим с lightweight.
+        dotnet publish SentinelTool.csproj -c Release -r win-x64 -p:PublishSingleFile=true --self-contained false -o output_folder
 
     - name: Upload EXE
       uses: actions/upload-artifact@v4
